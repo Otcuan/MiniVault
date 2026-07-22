@@ -1,0 +1,42 @@
+MINI VAULT - CAC LENH CHAY TREN WINDOWS CMD
+
+1. Mo CMD, di den thu muc vua giai nen:
+   cd /d D:\duong-dan\MiniVault_CongTuan_Starter
+
+2. Kiem tra Python:
+   py --version
+
+3. Cach nhanh: chay file setup:
+   setup_cmd.bat
+
+4. Hoac chay tung lenh:
+   py -m venv .venv
+   .venv\Scripts\activate.bat
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   pytest -q
+
+5. Chay server:
+   run_server_cmd.bat
+
+   Hoac:
+   .venv\Scripts\activate.bat
+   uvicorn main:app --reload
+
+6. Mo Swagger tren trinh duyet:
+   http://127.0.0.1:8000/docs
+
+7. Sua code bang Notepad tu CMD:
+   notepad src\core\vault.py
+   notepad src\core\crypto.py
+   notepad src\storage\database.py
+   notepad main.py
+
+8. Xem file config sau khi init:
+   type data\vault_config.json
+
+9. Xem cau truc thu muc:
+   tree /F
+
+10. Xoa du lieu runtime de test init lai:
+    reset_runtime_data_cmd.bat
