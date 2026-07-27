@@ -1,7 +1,7 @@
 @echo off
 setlocal
 cd /d "%~dp0"
-echo CANH BAO: lenh nay xoa vault_config.json va database runtime.
+echo CANH BAO: lenh nay xoa Vault config va database runtime.
 choice /C YN /M "Tiep tuc"
 if errorlevel 2 exit /b 0
 if exist data\vault_config.json del /Q data\vault_config.json

@@ -14,8 +14,3 @@ class VaultUnlockRequest(BaseModel):
 class VaultStatusResponse(BaseModel):
     initialized: bool
     status: Literal["not_initialized", "locked", "unlocked"]
-
-
-class ErrorResponse(BaseModel):
-    error: str
-    message: str

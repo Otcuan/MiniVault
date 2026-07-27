@@ -1,18 +1,14 @@
 class KvError(Exception):
-    """Lớp cha cho mọi lỗi liên quan đến KV Engine."""
+    pass
 
 
 class RecordNotFoundError(KvError):
-    """Không tìm thấy record tại path được yêu cầu."""
+    pass
 
 
 class RecordTamperedError(KvError):
-    """Dữ liệu trên đĩa đã bị sửa — GCM tag không khớp khi giải mã."""
+    pass
 
 
 class PermissionDeniedError(KvError):
-    """Path không thuộc quyền sở hữu của người gọi."""
-
-
-class InvalidPathError(KvError):
-    """Path không đúng định dạng secret/<email>/..."""
+    pass

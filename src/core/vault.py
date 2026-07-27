@@ -22,8 +22,6 @@ DEK_WRAP_AAD = b"mini-vault:dek-wrap:v1"
 
 
 class VaultService:
-    """Điều phối init, unlock, lock và cung cấp DEK cho service nội bộ."""
-
     def __init__(self, config_store: JsonConfigStore, state: VaultState) -> None:
         self.config_store = config_store
         self.state = state
@@ -34,49 +32,40 @@ class VaultService:
     def initialize(self, master_passphrase: str) -> dict[str, Any]:
         if self.is_initialized():
             raise VaultAlreadyInitializedError()
-
         self._validate_master_passphrase(master_passphrase)
 
         salt = secrets.token_bytes(16)
         parameters = KDFParameters()
         wrapping_key = derive_wrapping_key(master_passphrase, salt, parameters)
         dek = generate_dek()
+        wrapped = encrypt_aes_gcm(wrapping_key, dek, DEK_WRAP_AAD)
 
-        encrypted_dek = encrypt_aes_gcm(
-            key=wrapping_key,
-            plaintext=dek,
-            associated_data=DEK_WRAP_AAD,
+        self.config_store.save_atomic(
+            {
+                "version": CONFIG_VERSION,
+                "status": "locked",
+                "kdf": "argon2id",
+                "kdf_salt_b64": encode_b64(salt),
+                "kdf_parameters": {
+                    "time_cost": parameters.time_cost,
+                    "memory_cost": parameters.memory_cost,
+                    "parallelism": parameters.parallelism,
+                    "hash_len": parameters.hash_len,
+                },
+                "dek_nonce_b64": encode_b64(wrapped.nonce),
+                "encrypted_dek_b64": encode_b64(wrapped.ciphertext),
+                "dek_tag_b64": encode_b64(wrapped.tag),
+            }
         )
-
-        config = {
-            "version": CONFIG_VERSION,
-            "status": "locked",
-            "kdf": "argon2id",
-            "kdf_salt_b64": encode_b64(salt),
-            "kdf_parameters": {
-                "time_cost": parameters.time_cost,
-                "memory_cost": parameters.memory_cost,
-                "parallelism": parameters.parallelism,
-                "hash_len": parameters.hash_len,
-            },
-            "dek_nonce_b64": encode_b64(encrypted_dek.nonce),
-            "encrypted_dek_b64": encode_b64(encrypted_dek.ciphertext),
-            "dek_tag_b64": encode_b64(encrypted_dek.tag),
-        }
-
-        self.config_store.save_atomic(config)
-        self.state.lock()  # init xong vẫn locked theo thiết kế của nhóm
+        self.state.lock()
         return self.status()
 
     def unlock(self, master_passphrase: str) -> dict[str, Any]:
         if not self.is_initialized():
             raise VaultNotInitializedError()
-
-        self.state.lock()  # thử unlock thất bại thì Vault chắc chắn vẫn khóa
+        self.state.lock()
         config = self._load_and_validate_config()
-
         try:
-            salt = decode_b64(config["kdf_salt_b64"])
             parameter_data = config["kdf_parameters"]
             parameters = KDFParameters(
                 time_cost=int(parameter_data["time_cost"]),
@@ -84,27 +73,27 @@ class VaultService:
                 parallelism=int(parameter_data["parallelism"]),
                 hash_len=int(parameter_data["hash_len"]),
             )
-
-            wrapping_key = derive_wrapping_key(master_passphrase, salt, parameters)
-            encrypted_dek = EncryptedBlob(
-                nonce=decode_b64(config["dek_nonce_b64"]),
-                ciphertext=decode_b64(config["encrypted_dek_b64"]),
-                tag=decode_b64(config["dek_tag_b64"]),
+            wrapping_key = derive_wrapping_key(
+                master_passphrase,
+                decode_b64(config["kdf_salt_b64"]),
+                parameters,
             )
             dek = decrypt_aes_gcm(
-                key=wrapping_key,
-                blob=encrypted_dek,
-                associated_data=DEK_WRAP_AAD,
+                wrapping_key,
+                EncryptedBlob(
+                    nonce=decode_b64(config["dek_nonce_b64"]),
+                    ciphertext=decode_b64(config["encrypted_dek_b64"]),
+                    tag=decode_b64(config["dek_tag_b64"]),
+                ),
+                DEK_WRAP_AAD,
             )
         except InvalidTag as exc:
-            # Không tiết lộ là sai passphrase hay tag/ciphertext bị sửa.
             raise InvalidMasterPassphraseError() from exc
         except (KeyError, TypeError, ValueError) as exc:
             raise VaultConfigCorruptedError() from exc
 
         if len(dek) != 32:
             raise VaultConfigCorruptedError()
-
         self.state.set_dek(dek)
         return self.status()
 
@@ -116,7 +105,6 @@ class VaultService:
         self.state.get_dek()
 
     def get_dek(self) -> bytes:
-        """Chỉ dùng trong service nội bộ; không đưa giá trị này vào API response."""
         return self.state.get_dek()
 
     def status(self) -> dict[str, Any]:
@@ -129,7 +117,7 @@ class VaultService:
 
     def _load_and_validate_config(self) -> dict[str, Any]:
         config = self.config_store.load()
-        required_fields = {
+        required = {
             "version",
             "status",
             "kdf",
@@ -139,12 +127,9 @@ class VaultService:
             "encrypted_dek_b64",
             "dek_tag_b64",
         }
-
-        if not required_fields.issubset(config.keys()):
+        if not required.issubset(config):
             raise VaultConfigCorruptedError()
-        if config["version"] != CONFIG_VERSION:
-            raise VaultConfigCorruptedError()
-        if config["kdf"] != "argon2id":
+        if config["version"] != CONFIG_VERSION or config["kdf"] != "argon2id":
             raise VaultConfigCorruptedError()
         return config
 

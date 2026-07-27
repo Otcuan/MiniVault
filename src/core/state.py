@@ -4,7 +4,7 @@ from src.core.exceptions import VaultLockedError
 
 
 class VaultState:
-    """Trạng thái runtime: DEK chỉ tồn tại trong bộ nhớ khi Vault đã unlock."""
+    """Runtime DEK holder. The DEK only exists while the Vault is unlocked."""
 
     def __init__(self) -> None:
         self._dek: bytearray | None = None
@@ -18,9 +18,8 @@ class VaultState:
     def set_dek(self, dek: bytes) -> None:
         if len(dek) != 32:
             raise ValueError("DEK must contain exactly 32 bytes")
-
         with self._lock:
-            self._clear_dek_without_lock()
+            self._clear_without_lock()
             self._dek = bytearray(dek)
 
     def get_dek(self) -> bytes:
@@ -31,9 +30,9 @@ class VaultState:
 
     def lock(self) -> None:
         with self._lock:
-            self._clear_dek_without_lock()
+            self._clear_without_lock()
 
-    def _clear_dek_without_lock(self) -> None:
+    def _clear_without_lock(self) -> None:
         if self._dek is not None:
             for index in range(len(self._dek)):
                 self._dek[index] = 0

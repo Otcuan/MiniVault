@@ -1,25 +1,26 @@
 class AuthError(Exception):
-    """Lớp cha cho mọi lỗi liên quan đến Authentication."""
+    pass
 
 
 class DuplicateEmailError(AuthError):
-    """Email đã được đăng ký bởi tài khoản khác."""
+    pass
 
 
 class PassphraseMismatchError(AuthError):
-    """Passphrase và confirm passphrase không khớp."""
+    pass
 
 
 class WeakPassphraseError(AuthError):
-    """Passphrase không đạt độ dài tối thiểu theo chính sách."""
+    pass
 
 
 class InvalidCredentialsError(AuthError):
-    """Email hoặc passphrase không đúng."""
+    pass
 
 
 class AccountLockedError(AuthError):
-    """Tài khoản đang bị khóa tạm thời do đăng nhập sai nhiều lần liên tiếp."""
+    pass
+
 
 class UnauthenticatedError(AuthError):
-    """Token thiếu, sai định dạng, không tồn tại, hoặc đã hết hạn."""
+    pass

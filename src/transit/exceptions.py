@@ -1,5 +1,46 @@
-from src.core.exceptions import VaultError
+class TransitError(Exception):
+    pass
 
 
-class MalformedCiphertextError(VaultError):
-    """Ciphertext không đúng dạng `vault:<key_name>:<base64>` hoặc bị cắt/sửa."""
+class MalformedCiphertextError(TransitError):
+    pass
+
+
+class TransitTamperedError(TransitError):
+    pass
+
+
+class KeyAlreadyExistsError(TransitError):
+    pass
+
+
+class KeyUnavailableError(TransitError):
+    """Generic response for nonexistent or foreign keys."""
+
+
+class KeyRevokedError(TransitError):
+    pass
+
+
+class InvalidKeyUsageError(TransitError):
+    pass
+
+
+class InvalidSigningAlgorithmError(TransitError):
+    pass
+
+
+class InvalidMessageTypeError(TransitError):
+    pass
+
+
+class InvalidDigestLengthError(TransitError):
+    pass
+
+
+class InvalidBase64PayloadError(TransitError):
+    pass
+
+
+class InvalidKeyNameError(TransitError):
+    pass

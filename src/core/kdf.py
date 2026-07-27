@@ -5,12 +5,10 @@ from argon2.low_level import Type, hash_secret_raw
 
 @dataclass(frozen=True)
 class KDFParameters:
-    """Tham số Argon2id được lưu cùng cấu hình để unlock có thể tái tạo khóa."""
-
     time_cost: int = 3
-    memory_cost: int = 65536  # KiB = 64 MiB
+    memory_cost: int = 65536
     parallelism: int = 4
-    hash_len: int = 32  # 32 bytes = 256 bits
+    hash_len: int = 32
 
 
 DEFAULT_KDF_PARAMETERS = KDFParameters()
@@ -21,8 +19,6 @@ def derive_wrapping_key(
     salt: bytes,
     parameters: KDFParameters = DEFAULT_KDF_PARAMETERS,
 ) -> bytes:
-    """Dẫn xuất wrapping key 32 byte từ Master Passphrase bằng Argon2id."""
-
     if not isinstance(master_passphrase, str):
         raise TypeError("Master Passphrase must be a string")
     if not master_passphrase:

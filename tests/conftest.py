@@ -1,12 +1,4 @@
-"""Shared pytest fixtures cho toàn bộ test suite (THO-01).
-
-Mọi test module (Core, Auth, KV, Transit, Sign/Verify) nên dùng các fixture
-ở đây thay vì tự dựng TestClient/DB riêng, để đảm bảo:
-- Mỗi test chạy trên database + vault config sạch (tmp_path của pytest).
-- Alice và Bob dùng chung định danh cho mọi test cross-user.
-- Không test nào phụ thuộc state để lại bởi test khác.
-"""
-
+import base64
 from pathlib import Path
 from typing import Iterator
 
@@ -16,54 +8,69 @@ from fastapi.testclient import TestClient
 from main import create_app
 
 
-VAULT_MASTER_PASSPHRASE = "MiniVault-Master-2026!"
-
+MASTER = "MiniVault-Master-2026!"
 ALICE_EMAIL = "alice@minivault.test"
 ALICE_PASSWORD = "Alice-Strong-Passw0rd!"
-
 BOB_EMAIL = "bob@minivault.test"
 BOB_PASSWORD = "Bob-Strong-Passw0rd!"
 
 
+def b64(value: bytes | str) -> str:
+    if isinstance(value, str):
+        value = value.encode("utf-8")
+    return base64.b64encode(value).decode("ascii")
+
+
 @pytest.fixture
 def vault_paths(tmp_path: Path) -> dict[str, Path]:
-    """Đường dẫn config/database riêng cho từng test, tự động dọn theo tmp_path."""
     return {
-        "config_path": tmp_path / "vault_config.json",
-        "database_path": tmp_path / "mini_vault.db",
+        "config": tmp_path / "vault_config.json",
+        "database": tmp_path / "mini_vault.db",
     }
 
 
 @pytest.fixture
 def client(vault_paths: dict[str, Path]) -> Iterator[TestClient]:
-    """TestClient dùng app + database sạch, độc lập với mọi test khác."""
-    app = create_app(
-        config_path=vault_paths["config_path"],
-        database_path=vault_paths["database_path"],
-    )
+    app = create_app(vault_paths["config"], vault_paths["database"])
     with TestClient(app) as test_client:
         yield test_client
 
 
 @pytest.fixture
 def unlocked_client(client: TestClient) -> TestClient:
-    """Client với vault đã init + unlock, dùng cho test không thuộc phần Core."""
-    client.post(
-        "/v1/vault/init",
-        json={"master_passphrase": VAULT_MASTER_PASSPHRASE},
-    )
-    client.post(
-        "/v1/vault/unlock",
-        json={"master_passphrase": VAULT_MASTER_PASSPHRASE},
-    )
+    assert client.post("/v1/vault/init", json={"master_passphrase": MASTER}).status_code == 201
+    assert client.post("/v1/vault/unlock", json={"master_passphrase": MASTER}).status_code == 200
     return client
 
 
-@pytest.fixture
-def alice() -> dict[str, str]:
-    return {"email": ALICE_EMAIL, "password": ALICE_PASSWORD}
+def register(client: TestClient, email: str, password: str) -> None:
+    response = client.post(
+        "/v1/auth/register",
+        json={"email": email, "passphrase": password, "confirm_passphrase": password},
+    )
+    assert response.status_code == 201, response.text
+
+
+def login(client: TestClient, email: str, password: str) -> dict[str, str]:
+    response = client.post(
+        "/v1/auth/login",
+        json={"email": email, "passphrase": password},
+    )
+    assert response.status_code == 200, response.text
+    return {"Authorization": f"Bearer {response.json()['token']}"}
 
 
 @pytest.fixture
-def bob() -> dict[str, str]:
-    return {"email": BOB_EMAIL, "password": BOB_PASSWORD}
+def alice_headers(unlocked_client: TestClient) -> dict[str, str]:
+    register(unlocked_client, ALICE_EMAIL, ALICE_PASSWORD)
+    return login(unlocked_client, ALICE_EMAIL, ALICE_PASSWORD)
+
+
+@pytest.fixture
+def alice_bob_headers(unlocked_client: TestClient) -> tuple[dict[str, str], dict[str, str]]:
+    register(unlocked_client, ALICE_EMAIL, ALICE_PASSWORD)
+    register(unlocked_client, BOB_EMAIL, BOB_PASSWORD)
+    return (
+        login(unlocked_client, ALICE_EMAIL, ALICE_PASSWORD),
+        login(unlocked_client, BOB_EMAIL, BOB_PASSWORD),
+    )

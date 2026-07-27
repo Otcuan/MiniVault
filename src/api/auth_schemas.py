@@ -2,6 +2,7 @@ import re
 
 from pydantic import BaseModel, Field, field_validator
 
+
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
@@ -12,15 +13,17 @@ class RegisterRequest(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validate_email_format(cls, value: str) -> str:
-        if not EMAIL_PATTERN.match(value.strip()):
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not EMAIL_PATTERN.fullmatch(normalized):
             raise ValueError("Invalid email format")
-        return value
+        return normalized
 
 
 class RegisterResponse(BaseModel):
     email: str
     created_at: str
+
 
 class LoginRequest(BaseModel):
     email: str = Field(min_length=3, max_length=254)
@@ -28,10 +31,11 @@ class LoginRequest(BaseModel):
 
     @field_validator("email")
     @classmethod
-    def validate_email_format(cls, value: str) -> str:
-        if not EMAIL_PATTERN.match(value.strip()):
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if not EMAIL_PATTERN.fullmatch(normalized):
             raise ValueError("Invalid email format")
-        return value
+        return normalized
 
 
 class LoginResponse(BaseModel):
