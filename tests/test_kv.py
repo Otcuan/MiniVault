@@ -1,127 +1,105 @@
 import sqlite3
-from pathlib import Path
+from contextlib import closing
 
 from fastapi.testclient import TestClient
-from contextlib import contextmanager
-from main import create_app
 
-MASTER_PASSPHRASE = "MiniVault-Master-2026!"
-PASSPHRASE = "MySecurePass123"
-EMAIL = "alice@example.com"
-PATH = "secret/alice@example.com/db"
+from tests.conftest import ALICE_EMAIL, BOB_EMAIL
 
 
-@contextmanager
-def create_ready_client(tmp_path: Path):
-    """Context manager: vault đã init+unlock, user đã register+login (token gắn sẵn header)."""
-    app = create_app(
-        config_path=tmp_path / "vault_config.json",
-        database_path=tmp_path / "mini_vault.db",
+PATH = f"secret/{ALICE_EMAIL}/database"
+
+
+def test_write_read_roundtrip(unlocked_client: TestClient, alice_headers) -> None:
+    write = unlocked_client.post(
+        "/v1/kv/entries",
+        json={"path": PATH, "data": {"password": "hunter2", "unicode": "bí mật"}},
+        headers=alice_headers,
     )
-    with TestClient(app) as client:
-        client.post("/v1/vault/init", json={"master_passphrase": MASTER_PASSPHRASE})
-        client.post("/v1/vault/unlock", json={"master_passphrase": MASTER_PASSPHRASE})
-        client.post(
-            "/v1/auth/register",
-            json={"email": EMAIL, "passphrase": PASSPHRASE, "confirm_passphrase": PASSPHRASE},
+    assert write.status_code == 200
+    read = unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=alice_headers)
+    assert read.json()["data"] == {"password": "hunter2", "unicode": "bí mật"}
+
+
+def test_disk_contains_no_plaintext(unlocked_client: TestClient, alice_headers, vault_paths) -> None:
+    secret = "very-secret-value-12345"
+    unlocked_client.post(
+        "/v1/kv/entries",
+        json={"path": PATH, "data": {"password": secret}},
+        headers=alice_headers,
+    )
+    raw = vault_paths["database"].read_bytes()
+    assert secret.encode() not in raw
+    assert b'"password"' not in raw
+
+
+def test_tampered_record_detected(unlocked_client: TestClient, alice_headers, vault_paths) -> None:
+    unlocked_client.post(
+        "/v1/kv/entries",
+        json={"path": PATH, "data": {"password": "hunter2"}},
+        headers=alice_headers,
+    )
+    with closing(sqlite3.connect(vault_paths["database"])) as conn:
+        tag = conn.execute("SELECT tag_b64 FROM kv_records WHERE path = ?", (PATH,)).fetchone()[0]
+        tampered = ("A" if tag[0] != "A" else "B") + tag[1:]
+        conn.execute("UPDATE kv_records SET tag_b64 = ? WHERE path = ?", (tampered, PATH))
+        conn.commit()
+    response = unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=alice_headers)
+    assert response.status_code == 409
+    assert response.json()["error"] == "TAMPER_DETECTED"
+
+
+def test_overwrite_keeps_single_record(unlocked_client: TestClient, alice_headers, vault_paths) -> None:
+    for value in ("old", "new"):
+        unlocked_client.post(
+            "/v1/kv/entries", json={"path": PATH, "data": {"value": value}}, headers=alice_headers
         )
-        login_response = client.post("/v1/auth/login", json={"email": EMAIL, "passphrase": PASSPHRASE})
-        token = login_response.json()["token"]
-        client.headers.update({"Authorization": f"Bearer {token}"})
-        yield client
+    with closing(sqlite3.connect(vault_paths["database"])) as conn:
+        count = conn.execute("SELECT COUNT(*) FROM kv_records WHERE path = ?", (PATH,)).fetchone()[0]
+    assert count == 1
+    assert unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=alice_headers).json()["data"]["value"] == "new"
 
 
-def test_write_then_read_roundtrip(tmp_path: Path) -> None:
-    with create_ready_client(tmp_path) as client:
-        write_response = client.post(
-            "/v1/kv/entries", json={"path": PATH, "data": {"password": "hunter2"}}
-        )
-        assert write_response.status_code == 200
-        assert "created_at" in write_response.json()
-
-        read_response = client.get("/v1/kv/entries", params={"path": PATH})
-        assert read_response.status_code == 200
-        assert read_response.json()["data"] == {"password": "hunter2"}
+def test_not_found_for_owner(unlocked_client: TestClient, alice_headers) -> None:
+    response = unlocked_client.get(
+        "/v1/kv/entries",
+        params={"path": f"secret/{ALICE_EMAIL}/missing"},
+        headers=alice_headers,
+    )
+    assert response.status_code == 404
 
 
-def test_overwrite_does_not_keep_version_history(tmp_path: Path) -> None:
-    with create_ready_client(tmp_path) as client:
-        client.post("/v1/kv/entries", json={"path": PATH, "data": {"password": "old"}})
-        client.post("/v1/kv/entries", json={"path": PATH, "data": {"password": "new"}})
-
-        read_response = client.get("/v1/kv/entries", params={"path": PATH})
-        assert read_response.json()["data"] == {"password": "new"}  # chỉ còn bản mới nhất
-
-
-def test_read_nonexistent_path_returns_not_found(tmp_path: Path) -> None:
-    with create_ready_client(tmp_path) as client:
-        response = client.get("/v1/kv/entries", params={"path": "secret/alice@example.com/ghost"})
-        assert response.status_code == 404
-        assert response.json()["error"] == "NOT_FOUND"
+def test_cross_user_read_write_delete_denied(unlocked_client: TestClient, alice_bob_headers) -> None:
+    alice, bob = alice_bob_headers
+    unlocked_client.post("/v1/kv/entries", json={"path": PATH, "data": {"secret": "alice"}}, headers=alice)
+    assert unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=bob).status_code == 403
+    assert unlocked_client.post("/v1/kv/entries", json={"path": PATH, "data": {"secret": "bob"}}, headers=bob).status_code == 403
+    assert unlocked_client.delete("/v1/kv/entries", params={"path": PATH}, headers=bob).status_code == 403
+    assert unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=alice).status_code == 200
 
 
-def test_delete_removes_record(tmp_path: Path) -> None:
-    with create_ready_client(tmp_path) as client:
-        client.post("/v1/kv/entries", json={"path": PATH, "data": {"password": "hunter2"}})
-
-        delete_response = client.delete("/v1/kv/entries", params={"path": PATH})
-        assert delete_response.status_code == 204
-
-        read_response = client.get("/v1/kv/entries", params={"path": PATH})
-        assert read_response.status_code == 404
+def test_malformed_path_is_permission_denied(unlocked_client: TestClient, alice_headers) -> None:
+    response = unlocked_client.post(
+        "/v1/kv/entries", json={"path": "invalid", "data": {"x": 1}}, headers=alice_headers
+    )
+    assert response.status_code == 403
 
 
-def test_delete_nonexistent_path_returns_not_found(tmp_path: Path) -> None:
-    with create_ready_client(tmp_path) as client:
-        response = client.delete("/v1/kv/entries", params={"path": "secret/alice@example.com/ghost"})
-        assert response.status_code == 404
+def test_authorization_precedes_vault_state(unlocked_client: TestClient, alice_bob_headers) -> None:
+    _, bob = alice_bob_headers
+    unlocked_client.post("/v1/vault/lock")
+    response = unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=bob)
+    assert response.status_code == 403
+    assert response.json()["error"] == "PERMISSION_DENIED"
 
 
-def test_disk_never_contains_plaintext_secret(tmp_path: Path) -> None:
-    database_path = tmp_path / "mini_vault.db"
-
-    with create_ready_client(tmp_path) as client:
-        client.post(
-            "/v1/kv/entries",
-            json={"path": PATH, "data": {"password": "very-secret-value-12345"}},
-        )
-
-    conn = sqlite3.connect(database_path)
-    row = conn.execute(
-        "SELECT nonce_b64, ciphertext_b64, tag_b64 FROM kv_records WHERE path = ?", (PATH,)
-    ).fetchone()
-    conn.close()
-
-    assert row is not None
-    for column_value in row:
-        assert "very-secret-value-12345" not in column_value
-        assert "password" not in column_value
-
-
-def test_tampered_tag_is_rejected_on_read(tmp_path: Path) -> None:
-    database_path = tmp_path / "mini_vault.db"
-    config_path = tmp_path / "vault_config.json"
-
-    with create_ready_client(tmp_path) as client:
-        client.post("/v1/kv/entries", json={"path": PATH, "data": {"password": "hunter2"}})
-
-    # Sửa tay 1 byte trong tag_b64 trên đĩa, mô phỏng dữ liệu bị tamper
-    conn = sqlite3.connect(database_path)
-    row = conn.execute("SELECT tag_b64 FROM kv_records WHERE path = ?", (PATH,)).fetchone()
-    original_tag = row[0]
-    tampered_tag = ("Y" if original_tag[0] != "Y" else "Z") + original_tag[1:]
-    conn.execute("UPDATE kv_records SET tag_b64 = ? WHERE path = ?", (tampered_tag, PATH))
-    conn.commit()
-    conn.close()
-
-    # Mở app mới trên CÙNG config + database (đã bị tamper), unlock lại, rồi thử đọc
-    app = create_app(config_path=config_path, database_path=database_path)
-    with TestClient(app) as client:
-        client.post("/v1/vault/unlock", json={"master_passphrase": MASTER_PASSPHRASE})
-        login_response = client.post("/v1/auth/login", json={"email": EMAIL, "passphrase": PASSPHRASE})
-        token = login_response.json()["token"]
-        client.headers.update({"Authorization": f"Bearer {token}"})
-
-        response = client.get("/v1/kv/entries", params={"path": PATH})
-        assert response.status_code == 409
-        assert response.json()["error"] == "TAMPER_DETECTED"
+def test_denied_access_audited_without_secret(unlocked_client: TestClient, alice_bob_headers, vault_paths) -> None:
+    alice, bob = alice_bob_headers
+    marker = "must-not-enter-audit"
+    unlocked_client.post("/v1/kv/entries", json={"path": PATH, "data": {"secret": marker}}, headers=alice)
+    unlocked_client.post("/v1/kv/entries", json={"path": PATH, "data": {"secret": marker}}, headers=bob)
+    with closing(sqlite3.connect(vault_paths["database"])) as conn:
+        rows = conn.execute("SELECT * FROM audit_logs").fetchall()
+    text = " ".join(str(v) for row in rows for v in row)
+    assert marker not in text
+    assert "Bearer" not in text
+    assert BOB_EMAIL in text

@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS named_keys (
     UNIQUE(owner_email, key_name)
 );
 CREATE INDEX IF NOT EXISTS idx_named_keys_owner_email ON named_keys(owner_email);
+CREATE INDEX IF NOT EXISTS idx_named_keys_name ON named_keys(key_name);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -81,9 +82,9 @@ class Database:
     def connection(self) -> Iterator[sqlite3.Connection]:
         connection = sqlite3.connect(self.path, timeout=5.0)
         connection.row_factory = sqlite3.Row
-
         try:
             connection.execute("PRAGMA foreign_keys = ON")
+            connection.execute("PRAGMA busy_timeout = 5000")
             yield connection
             connection.commit()
         except Exception:

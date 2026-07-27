@@ -1,30 +1,30 @@
 class VaultError(Exception):
-    """Lớp cha cho mọi lỗi liên quan đến Vault."""
+    """Base class for Vault errors."""
 
 
 class VaultAlreadyInitializedError(VaultError):
-    """Vault đã được khởi tạo trước đó."""
+    pass
 
 
 class VaultNotInitializedError(VaultError):
-    """Vault chưa được khởi tạo."""
+    pass
 
 
 class VaultLockedError(VaultError):
-    """Một chức năng yêu cầu Vault mở khóa nhưng Vault đang khóa."""
+    pass
 
 
 class InvalidMasterPassphraseError(VaultError):
-    """Master Passphrase sai hoặc wrapped DEK không thể xác thực."""
+    pass
 
 
 class InvalidMasterPassphrasePolicyError(VaultError):
-    """Master Passphrase không đạt chính sách tối thiểu."""
+    pass
 
 
 class VaultConfigCorruptedError(VaultError):
-    """File cấu hình thiếu trường, sai Base64 hoặc bị sửa/hỏng."""
+    pass
 
 
 class StorageError(VaultError):
-    """Không thể đọc hoặc ghi dữ liệu xuống đĩa."""
+    pass

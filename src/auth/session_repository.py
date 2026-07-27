@@ -21,9 +21,8 @@ class SessionRepository:
             )
 
     def find_active_by_token_hash(self, token_hash: str) -> Optional[sqlite3.Row]:
-        """Chỉ trả session còn hạn và chưa bị thu hồi; kèm email để dùng cho auth dependency ở bước 3."""
         with self._database.connection() as conn:
-            cursor = conn.execute(
+            return conn.execute(
                 """
                 SELECT sessions.*, users.email AS user_email
                 FROM sessions
@@ -31,5 +30,13 @@ class SessionRepository:
                 WHERE sessions.token_hash = ? AND sessions.revoked_at IS NULL
                 """,
                 (token_hash,),
+            ).fetchone()
+
+    def revoke(self, token_hash: str) -> bool:
+        now = datetime.now(timezone.utc).isoformat()
+        with self._database.connection() as conn:
+            cursor = conn.execute(
+                "UPDATE sessions SET revoked_at = ? WHERE token_hash = ? AND revoked_at IS NULL",
+                (now, token_hash),
             )
-            return cursor.fetchone()
+            return cursor.rowcount > 0

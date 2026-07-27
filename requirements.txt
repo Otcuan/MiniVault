@@ -3,4 +3,5 @@ uvicorn[standard]>=0.30,<1.0
 cryptography>=46,<50
 argon2-cffi>=23,<26
 pytest>=8,<10
-httpx>=0.27,<1.0
+httpx2==2.7.0
+coverage>=7,<8

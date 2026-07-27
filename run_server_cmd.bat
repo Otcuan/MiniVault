@@ -6,5 +6,5 @@ if not exist .venv\Scripts\activate.bat (
   exit /b 1
 )
 call .venv\Scripts\activate.bat
-uvicorn main:app --reload
+python -m uvicorn main:app --reload
 endlocal
