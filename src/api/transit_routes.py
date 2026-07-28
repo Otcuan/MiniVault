@@ -5,6 +5,7 @@ from src.api.transit_schemas import (
     CreateSigningKeyRequest,
     DecryptRequest,
     DecryptResponse,
+    DeleteKeyResponse,
     EncryptRequest,
     EncryptResponse,
     KeyListResponse,
@@ -59,13 +60,24 @@ def list_keys(
     return {"keys": service.list_keys(current_user.email)}
 
 
-@router.post("/keys/{key_name}/revoke", response_model=KeyMetadata)
+@router.post("/keys/{key_name}/rotate", response_model=KeyMetadata)
+def rotate_key(
+    key_name: str,
+    current_user: AuthenticatedUser = Depends(get_current_user),
+    service: TransitService = Depends(get_transit_service),
+) -> dict:
+    """Section IV: add a new key version; earlier versions stay decryptable."""
+    return service.rotate_key(current_user.email, key_name)
+
+
+@router.post("/keys/{key_name}/revoke", response_model=DeleteKeyResponse)
 def revoke_key(
     key_name: str,
     current_user: AuthenticatedUser = Depends(get_current_user),
     service: TransitService = Depends(get_transit_service),
 ) -> dict:
-    return service.revoke_key(current_user.email, key_name)
+    """2.1: permanently delete the named key and every version of its material."""
+    return service.delete_key(current_user.email, key_name)
 
 
 @router.post("/encrypt", response_model=EncryptResponse)
@@ -114,4 +126,5 @@ def verify(
         payload.message_type,
         payload.signature_b64,
         payload.signing_algorithm,
+        payload.key_version,
     )

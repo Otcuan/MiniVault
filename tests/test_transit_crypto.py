@@ -79,17 +79,25 @@ def test_signing_key_cannot_encrypt(unlocked_client: TestClient, alice_headers) 
 
 
 def test_revoked_key_cannot_encrypt_or_decrypt(unlocked_client: TestClient, alice_headers) -> None:
+    """A revoked key is gone, so it answers exactly like a key that never
+    existed -- no separate status that would confirm the name was once real."""
     create_key(unlocked_client, alice_headers, "rev")
     token = unlocked_client.post(
         "/v1/transit/encrypt", json={"key_name": "rev", "plaintext_b64": b64("x")}, headers=alice_headers
     ).json()["ciphertext"]
     unlocked_client.post("/v1/transit/keys/rev/revoke", headers=alice_headers)
-    assert unlocked_client.post(
+
+    encrypt = unlocked_client.post(
         "/v1/transit/encrypt", json={"key_name": "rev", "plaintext_b64": b64("x")}, headers=alice_headers
-    ).status_code == 409
-    assert unlocked_client.post(
+    )
+    decrypt = unlocked_client.post(
         "/v1/transit/decrypt", json={"ciphertext": token}, headers=alice_headers
-    ).status_code == 409
+    )
+    never_existed = unlocked_client.post(
+        "/v1/transit/encrypt", json={"key_name": "no-such-key", "plaintext_b64": b64("x")}, headers=alice_headers
+    )
+    assert encrypt.status_code == decrypt.status_code == never_existed.status_code == 403
+    assert encrypt.json() == never_existed.json()
 
 
 def test_cross_user_cannot_decrypt(unlocked_client: TestClient, alice_bob_headers) -> None:

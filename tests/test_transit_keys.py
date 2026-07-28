@@ -19,7 +19,11 @@ def test_aes_key_material_is_encrypted_on_disk(unlocked_client: TestClient, alic
     unlocked_client.post("/v1/transit/keys", json={"key_name": "payments"}, headers=alice_headers)
     with closing(sqlite3.connect(vault_paths["database"])) as conn:
         row = conn.execute(
-            "SELECT nonce_b64, encrypted_key_material_b64, tag_b64 FROM named_keys WHERE key_name = 'payments'"
+            """
+            SELECT v.nonce_b64, v.encrypted_key_material_b64, v.tag_b64
+            FROM named_keys k JOIN named_key_versions v ON v.key_id = k.id
+            WHERE k.key_name = 'payments'
+            """
         ).fetchone()
     assert row is not None
     assert all(isinstance(value, str) and value for value in row)
@@ -36,7 +40,11 @@ def test_create_signing_key_stores_encrypted_private_and_public(unlocked_client:
     assert response.json()["key_usage"] == "SIGN_VERIFY"
     with closing(sqlite3.connect(vault_paths["database"])) as conn:
         row = conn.execute(
-            "SELECT encrypted_key_material_b64, public_key_b64 FROM named_keys WHERE key_name = 'signer'"
+            """
+            SELECT v.encrypted_key_material_b64, v.public_key_b64
+            FROM named_keys k JOIN named_key_versions v ON v.key_id = k.id
+            WHERE k.key_name = 'signer'
+            """
         ).fetchone()
     assert row[0] and row[1]
     assert row[0] != row[1]
@@ -65,11 +73,38 @@ def test_invalid_key_name_rejected(unlocked_client: TestClient, alice_headers) -
     assert response.json()["error"] == "INVALID_KEY_NAME"
 
 
-def test_revoke_key(unlocked_client: TestClient, alice_headers) -> None:
+def test_revoke_key_permanently_deletes_material(
+    unlocked_client: TestClient, alice_headers, vault_paths
+) -> None:
+    """Section 2.1 asks revoke_key to permanently delete the key.
+
+    So this asserts more than an HTTP status: no wrapped key material for that
+    name may survive anywhere in the database.
+    """
     unlocked_client.post("/v1/transit/keys", json={"key_name": "revoked"}, headers=alice_headers)
+    with closing(sqlite3.connect(vault_paths["database"])) as conn:
+        material = conn.execute(
+            """
+            SELECT v.encrypted_key_material_b64
+            FROM named_keys k JOIN named_key_versions v ON v.key_id = k.id
+            WHERE k.key_name = 'revoked'
+            """
+        ).fetchone()[0]
+
     response = unlocked_client.post("/v1/transit/keys/revoked/revoke", headers=alice_headers)
     assert response.status_code == 200
-    assert response.json()["revoked"] is True
+    assert response.json() == {"key_name": "revoked", "deleted": True}
+
+    with closing(sqlite3.connect(vault_paths["database"])) as conn:
+        assert conn.execute(
+            "SELECT COUNT(*) FROM named_keys WHERE key_name = 'revoked'"
+        ).fetchone()[0] == 0
+        # ON DELETE CASCADE must have taken the version rows with it.
+        assert conn.execute(
+            "SELECT COUNT(*) FROM named_key_versions WHERE encrypted_key_material_b64 = ?",
+            (material,),
+        ).fetchone()[0] == 0
+    assert unlocked_client.get("/v1/transit/keys", headers=alice_headers).json()["keys"] == []
 
 
 def test_create_key_requires_unlocked_vault(unlocked_client: TestClient, alice_headers) -> None:
@@ -88,3 +123,24 @@ def test_cross_user_key_is_generic_permission_denied(unlocked_client: TestClient
     )
     assert response.status_code == 403
     assert response.json()["error"] == "PERMISSION_DENIED"
+
+def test_list_keys_requires_unlocked_vault(unlocked_client: TestClient, alice_headers) -> None:
+    create_response = unlocked_client.post(
+        "/v1/transit/keys",
+        json={"key_name": "locked-list-key"},
+        headers=alice_headers,
+    )
+    assert create_response.status_code == 201
+
+    lock_response = unlocked_client.post(
+        "/v1/vault/lock"
+    )
+    assert lock_response.status_code == 200
+
+    response = unlocked_client.get(
+        "/v1/transit/keys",
+        headers=alice_headers,
+    )
+
+    assert response.status_code == 423
+    assert response.json()["error"] == "VAULT_LOCKED"

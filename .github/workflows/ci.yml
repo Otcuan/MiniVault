@@ -22,3 +22,20 @@ jobs:
       - run: python -m pip install -r requirements.txt
       - run: python -m compileall -q main.py src tests
       - run: python -m pytest -q -W error
+      - name: Coverage
+        run: |
+          python -m coverage run --source=src,main -m pytest -q
+          python -m coverage report -m
+      # Regenerating the samples exercises the real API end to end and fails if
+      # any plaintext marker is found in the resulting database.
+      - name: Sample generation and no-plaintext check
+        run: python -m scripts.generate_samples
+      - name: Fail if runtime secrets were committed
+        run: |
+          set -e
+          for path in data/mini_vault.db data/vault_config.json .env; do
+            if git ls-files --error-unmatch "$path" >/dev/null 2>&1; then
+              echo "::error::$path must never be committed"
+              exit 1
+            fi
+          done

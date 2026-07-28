@@ -1,13 +1,16 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from src.api.audit_routes import router as audit_router
 from src.api.auth_routes import router as auth_router
 from src.api.core_routes import router as core_router
 from src.api.kv_routes import router as kv_router
 from src.api.transit_routes import router as transit_router
+from src.audit.repository import AuditRepository
 from src.auth.exceptions import (
     AccountLockedError,
     DuplicateEmailError,
@@ -28,10 +31,15 @@ from src.core.exceptions import (
     VaultLockedError,
     VaultNotInitializedError,
 )
+from src.core import settings
 from src.core.state import VaultState
 from src.core.vault import VaultService
-from src.kv.audit_repository import AuditRepository
-from src.kv.exceptions import PermissionDeniedError, RecordNotFoundError, RecordTamperedError
+from src.kv.exceptions import (
+    InvalidVersionError,
+    PermissionDeniedError,
+    RecordNotFoundError,
+    RecordTamperedError,
+)
 from src.kv.repository import KvRepository
 from src.kv.service import KvService
 from src.storage.config_store import JsonConfigStore
@@ -44,8 +52,8 @@ from src.transit.exceptions import (
     InvalidMessageTypeError,
     InvalidSigningAlgorithmError,
     KeyAlreadyExistsError,
-    KeyRevokedError,
     KeyUnavailableError,
+    KeyVersionUnavailableError,
     MalformedCiphertextError,
     TransitTamperedError,
 )
@@ -54,11 +62,15 @@ from src.transit.service import TransitService
 
 
 def create_app(
-    config_path: Path = Path("data/vault_config.json"),
-    database_path: Path = Path("data/mini_vault.db"),
+    config_path: Optional[Path] = None,
+    database_path: Optional[Path] = None,
 ) -> FastAPI:
-    vault_service = VaultService(JsonConfigStore(config_path), VaultState())
-    database = Database(database_path)
+    """Build the application. Paths fall back to the environment settings."""
+    configured = settings.load()
+    vault_service = VaultService(
+        JsonConfigStore(config_path or configured.config_path), VaultState()
+    )
+    database = Database(database_path or configured.database_path)
     users = UserRepository(database)
     sessions = SessionRepository(database)
     audit = AuditRepository(database)
@@ -69,11 +81,14 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         database.initialize()
+        # Section 0.1: a restart always comes back locked. The DEK lives only in
+        # process memory, so a fresh process simply has nothing to unlock with.
         vault_service.lock()
         app.state.vault_service = vault_service
         app.state.database = database
         app.state.auth_service = auth_service
         app.state.session_repository = sessions
+        app.state.audit_repository = audit
         app.state.kv_service = kv_service
         app.state.transit_service = transit_service
         yield
@@ -81,7 +96,7 @@ def create_app(
 
     app = FastAPI(
         title="Mini Vault",
-        version="1.0.0",
+        version="2.0.0",
         description="Secure KV storage and Transit cryptography service.",
         lifespan=lifespan,
     )
@@ -89,6 +104,7 @@ def create_app(
     app.include_router(auth_router)
     app.include_router(kv_router)
     app.include_router(transit_router)
+    app.include_router(audit_router)
     register_error_handlers(app)
 
     @app.get("/health")
@@ -99,6 +115,11 @@ def create_app(
 
 
 def register_error_handlers(app: FastAPI) -> None:
+    """Map internal exceptions to stable {error, message} responses.
+
+    Responses never carry a stack trace, a cryptographic cause, or anything that
+    would let a caller distinguish "does not exist" from "not yours".
+    """
     handlers = [
         (VaultAlreadyInitializedError, 409, "VAULT_ALREADY_INITIALIZED", "Vault has already been initialized"),
         (VaultNotInitializedError, 409, "VAULT_NOT_INITIALIZED", "Vault has not been initialized"),
@@ -116,9 +137,10 @@ def register_error_handlers(app: FastAPI) -> None:
         (PermissionDeniedError, 403, "PERMISSION_DENIED", "You do not have access to this resource"),
         (RecordNotFoundError, 404, "NOT_FOUND", "Record not found"),
         (RecordTamperedError, 409, "TAMPER_DETECTED", "Stored record failed integrity verification"),
+        (InvalidVersionError, 400, "INVALID_VERSION", "Version must be a positive integer"),
         (KeyAlreadyExistsError, 409, "KEY_ALREADY_EXISTS", "A key with this name already exists"),
         (KeyUnavailableError, 403, "PERMISSION_DENIED", "The key is unavailable"),
-        (KeyRevokedError, 409, "KEY_REVOKED", "The key has been revoked"),
+        (KeyVersionUnavailableError, 404, "KEY_VERSION_NOT_FOUND", "The requested key version does not exist"),
         (InvalidKeyUsageError, 400, "INVALID_KEY_USAGE", "The key cannot be used for this operation"),
         (InvalidSigningAlgorithmError, 400, "INVALID_SIGNING_ALGORITHM", "The signing algorithm does not match the key"),
         (InvalidMessageTypeError, 400, "INVALID_MESSAGE_TYPE", "message_type must be RAW or DIGEST"),

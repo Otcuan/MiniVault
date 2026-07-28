@@ -12,7 +12,8 @@ from src.core.exceptions import (
     VaultConfigCorruptedError,
     VaultNotInitializedError,
 )
-from src.core.kdf import KDFParameters, derive_wrapping_key
+from src.core.kdf import KDFParameters, current_parameters, derive_wrapping_key
+from src.core.passphrase import evaluate as evaluate_passphrase
 from src.core.state import VaultState
 from src.storage.config_store import JsonConfigStore
 
@@ -35,7 +36,7 @@ class VaultService:
         self._validate_master_passphrase(master_passphrase)
 
         salt = secrets.token_bytes(16)
-        parameters = KDFParameters()
+        parameters = current_parameters()
         wrapping_key = derive_wrapping_key(master_passphrase, salt, parameters)
         dek = generate_dek()
         wrapped = encrypt_aes_gcm(wrapping_key, dek, DEK_WRAP_AAD)
@@ -135,7 +136,14 @@ class VaultService:
 
     @staticmethod
     def _validate_master_passphrase(master_passphrase: str) -> None:
-        if not isinstance(master_passphrase, str):
-            raise InvalidMasterPassphrasePolicyError()
-        if len(master_passphrase) < 12 or master_passphrase.isspace():
-            raise InvalidMasterPassphrasePolicyError()
+        """Section 0.1 asks for a "sufficiently strong" Master Passphrase.
+
+        The Master Passphrase is the single input protecting the DEK, so it is
+        held to the same policy as user passphrases (length, character classes,
+        no trivial patterns). Only enforced at init: unlock must accept whatever
+        was set, otherwise tightening the policy would lock an existing Vault
+        out of its own data.
+        """
+        issue = evaluate_passphrase(master_passphrase)
+        if issue is not None:
+            raise InvalidMasterPassphrasePolicyError(issue.code)

@@ -128,18 +128,23 @@ def test_aes_key_cannot_sign(unlocked_client: TestClient, alice_headers) -> None
 
 def test_revoked_signing_key_refused(unlocked_client: TestClient, alice_headers) -> None:
     create_signer(unlocked_client, alice_headers)
+    message = b64("x")
+    signature = sign(unlocked_client, alice_headers, "signer", message)
     unlocked_client.post("/v1/transit/keys/signer/revoke", headers=alice_headers)
-    response = unlocked_client.post(
+
+    signed = unlocked_client.post(
         "/v1/transit/sign",
         json={
             "key_name": "signer",
-            "message_b64": b64("x"),
+            "message_b64": message,
             "message_type": "RAW",
             "signing_algorithm": "ED25519",
         },
         headers=alice_headers,
     )
-    assert response.status_code == 409
+    # Both sign and verify refuse: the key material is gone, not merely flagged.
+    assert signed.status_code == 403
+    assert verify(unlocked_client, alice_headers, "signer", message, signature).status_code == 403
 
 
 def test_cross_user_cannot_sign_with_foreign_key(unlocked_client: TestClient, alice_bob_headers) -> None:

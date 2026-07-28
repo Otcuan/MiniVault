@@ -1,0 +1,3 @@
+# Runtime log directory (kept so the folder structure in section II exists).
+# The audit trail itself lives in the `audit_logs` table of data/mini_vault.db,
+# hash-chained and verifiable via GET /v1/audit/verify.

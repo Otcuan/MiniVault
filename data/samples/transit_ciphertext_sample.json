@@ -1,0 +1,81 @@
+{
+  "description": "Transit ciphertext and signatures. Un-rotated keys use the vault:<key_name>:<b64> framing required by section 2.2; after a rotation the version segment appears and older ciphertext still decrypts.",
+  "encrypt_decrypt": {
+    "before_rotation": {
+      "key_name": "demo-aes",
+      "key_version": 1,
+      "ciphertext": "vault:demo-aes:YiMvcuy/POCv5Xo5po4ECgf37M3Cf3ec0A2/1rngS9rGzhwTs5wL75Zoeps9BSh5m28HAg=="
+    },
+    "after_rotation": {
+      "key_name": "demo-aes",
+      "key_version": 2,
+      "ciphertext": "vault:v2:demo-aes:ITnwuCmt16boLGabuB0hmhMTbo4a6nfsuyM4srSCnm+BCrnb+gbJEMd/wgJrshxGcJNfCw=="
+    },
+    "decrypt_before_rotation_still_works": {
+      "key_name": "demo-aes",
+      "key_version": 1,
+      "plaintext_b64": "UExBSU5URVhULVRSQU5TSVQtTUFSS0VS"
+    }
+  },
+  "sign_verify": {
+    "signed": {
+      "key_name": "demo-sign",
+      "key_version": 1,
+      "signing_algorithm": "ED25519",
+      "signature_b64": "Ln7kX+vVfRjLhCzdhoVfRkaMRjDgIM3LpDfMaSpuGf0bwrr1huiOFVmJXvtyW7/Zc7y6ZAePpAjUnPVx3JEUBA=="
+    },
+    "message": "message signed by Mini Vault",
+    "sha256_of_message": "6e89ef34884edfd393b876bd91c632a4a1b6b946c8f7fac6d9a25476fd38ea01",
+    "verify_original": {
+      "key_name": "demo-sign",
+      "key_version": 1,
+      "signing_algorithm": "ED25519",
+      "signature_valid": true
+    },
+    "verify_tampered": {
+      "key_name": "demo-sign",
+      "key_version": null,
+      "signing_algorithm": "ED25519",
+      "signature_valid": false
+    }
+  },
+  "cross_user_denied": {
+    "status_code": 403,
+    "body": {
+      "error": "PERMISSION_DENIED",
+      "message": "The key is unavailable"
+    }
+  },
+  "stored_key_rows": [
+    {
+      "key_name": "demo-aes",
+      "owner_email": "alice@minivault.test",
+      "key_usage": "ENCRYPT_DECRYPT",
+      "signing_algorithm": null,
+      "version": 1,
+      "nonce_b64": "GITJ77dTMDflJbWN",
+      "encrypted_key_material_b64": "q0JJuEayX0+gl+r/9yaAk3N2OnDLh9tMGrsHPktqCr4=",
+      "tag_b64": "2ovWTeikaMHaSqx9X/h22g=="
+    },
+    {
+      "key_name": "demo-aes",
+      "owner_email": "alice@minivault.test",
+      "key_usage": "ENCRYPT_DECRYPT",
+      "signing_algorithm": null,
+      "version": 2,
+      "nonce_b64": "YT4N/cnpDzX8wchf",
+      "encrypted_key_material_b64": "3FygYGs7utQVIEbThc+u2o6RDfz/U0RneNSdBDlUki4=",
+      "tag_b64": "dVBQR/CgwBWrgHTsKambBg=="
+    },
+    {
+      "key_name": "demo-sign",
+      "owner_email": "alice@minivault.test",
+      "key_usage": "SIGN_VERIFY",
+      "signing_algorithm": "ED25519",
+      "version": 1,
+      "nonce_b64": "MZgaZ5VKhhZhLzsg",
+      "encrypted_key_material_b64": "s2FPDVWlML5kZNkvDwecPyztfOivyNNO40wl6H26z60=",
+      "tag_b64": "Cgii7AblIRU3atVCoEVFog=="
+    }
+  ]
+}

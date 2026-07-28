@@ -17,6 +17,12 @@
 - [x] Automated regression và end-to-end tests.
 - [x] README, traceability, report, demo script.
 
+## Mục IV — extra credit đã làm (tổng +1.0, đúng mức trần)
+
+- [x] **Key rotation cho Transit (+0.4):** named key có version, `rotate` sinh key material mới, ciphertext cũ vẫn giải mã được; version nằm trong AAD nên không thể đổi nhãn version.
+- [x] **KV versioning (+0.3):** mỗi lần ghi đè giữ lại version cũ, đọc theo `?version=N`, version nằm trong AAD nên không thể rollback bằng cách chép ciphertext cũ đè lên bản hiện tại.
+- [x] **Tamper-evident audit log (+0.3):** hash chain SHA-256, `GET /v1/audit/verify` phát hiện sửa/xóa/đảo thứ tự; head hash lưu ngoài bảng `audit_logs` nên phát hiện được cả việc xóa phần đuôi log.
+
 ## Reflection bảo mật
 
 1. **Confidentiality:** plaintext secret và key material không được persistence dưới dạng rõ; token thật không lưu DB.

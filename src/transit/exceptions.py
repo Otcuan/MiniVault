@@ -15,11 +15,11 @@ class KeyAlreadyExistsError(TransitError):
 
 
 class KeyUnavailableError(TransitError):
-    """Generic response for nonexistent or foreign keys."""
+    """Generic response for nonexistent, deleted or foreign keys."""
 
 
-class KeyRevokedError(TransitError):
-    pass
+class KeyVersionUnavailableError(TransitError):
+    """Ciphertext references a key version that does not exist."""
 
 
 class InvalidKeyUsageError(TransitError):

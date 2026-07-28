@@ -15,5 +15,8 @@ data/vault_config.json
 data/*.tmp
 data/logs/*.log
 data/logs/*.jsonl
+# Scratch directory used while generating data/samples/; the generated sample
+# files themselves are committed as submission evidence.
+data/samples/.build/
 .DS_Store
 Thumbs.db

@@ -39,16 +39,28 @@ def test_tampered_record_detected(unlocked_client: TestClient, alice_headers, va
         headers=alice_headers,
     )
     with closing(sqlite3.connect(vault_paths["database"])) as conn:
-        tag = conn.execute("SELECT tag_b64 FROM kv_records WHERE path = ?", (PATH,)).fetchone()[0]
+        tag = conn.execute(
+            """
+            SELECT v.tag_b64 FROM kv_versions v JOIN kv_records r ON v.record_id = r.id
+            WHERE r.path = ?
+            """,
+            (PATH,),
+        ).fetchone()[0]
         tampered = ("A" if tag[0] != "A" else "B") + tag[1:]
-        conn.execute("UPDATE kv_records SET tag_b64 = ? WHERE path = ?", (tampered, PATH))
+        conn.execute("UPDATE kv_versions SET tag_b64 = ?", (tampered,))
         conn.commit()
     response = unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=alice_headers)
     assert response.status_code == 409
     assert response.json()["error"] == "TAMPER_DETECTED"
 
 
-def test_overwrite_keeps_single_record(unlocked_client: TestClient, alice_headers, vault_paths) -> None:
+def test_overwrite_returns_the_newest_value(unlocked_client: TestClient, alice_headers, vault_paths) -> None:
+    """A plain read still resolves to the newest write.
+
+    With versioning enabled (section IV) the older ciphertext is retained, but
+    `kv_records` keeps exactly one pointer row per path and a read without an
+    explicit version behaves the same as before.
+    """
     for value in ("old", "new"):
         unlocked_client.post(
             "/v1/kv/entries", json={"path": PATH, "data": {"value": value}}, headers=alice_headers
@@ -56,7 +68,9 @@ def test_overwrite_keeps_single_record(unlocked_client: TestClient, alice_header
     with closing(sqlite3.connect(vault_paths["database"])) as conn:
         count = conn.execute("SELECT COUNT(*) FROM kv_records WHERE path = ?", (PATH,)).fetchone()[0]
     assert count == 1
-    assert unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=alice_headers).json()["data"]["value"] == "new"
+    body = unlocked_client.get("/v1/kv/entries", params={"path": PATH}, headers=alice_headers).json()
+    assert body["data"]["value"] == "new"
+    assert body["version"] == 2 and body["latest_version"] == 2
 
 
 def test_not_found_for_owner(unlocked_client: TestClient, alice_headers) -> None:

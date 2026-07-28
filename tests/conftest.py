@@ -1,14 +1,32 @@
 import base64
-from pathlib import Path
-from typing import Iterator
+import os
 
-import pytest
-from fastapi.testclient import TestClient
+# Argon2id is deliberately expensive. Every test initializes and unlocks a Vault
+# and registers users, so production cost parameters would make the suite take
+# minutes of pure key stretching. These overrides must be set before anything
+# imports the application, because settings are read from the environment.
+#
+# This only changes the COST, never the algorithm: the tests still exercise real
+# Argon2id, real AES-256-GCM and real ED25519.
+os.environ.setdefault("MINIVAULT_KDF_TIME_COST", "1")
+os.environ.setdefault("MINIVAULT_KDF_MEMORY_COST", "1024")
+os.environ.setdefault("MINIVAULT_KDF_PARALLELISM", "1")
+os.environ.setdefault("MINIVAULT_PASSWORD_TIME_COST", "1")
+os.environ.setdefault("MINIVAULT_PASSWORD_MEMORY_COST", "1024")
+os.environ.setdefault("MINIVAULT_PASSWORD_PARALLELISM", "1")
 
-from main import create_app
+from pathlib import Path  # noqa: E402
+from typing import Iterator  # noqa: E402
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from main import create_app  # noqa: E402
 
 
-MASTER = "MiniVault-Master-2026!"
+# Must satisfy src/core/passphrase.py: >=12 characters, >=3 character classes,
+# no long repeated run, and no blocklisted word (the product name is one).
+MASTER = "Tr0ng-Master-Key-2026!"
 ALICE_EMAIL = "alice@minivault.test"
 ALICE_PASSWORD = "Alice-Strong-Passw0rd!"
 BOB_EMAIL = "bob@minivault.test"
@@ -23,6 +41,7 @@ def b64(value: bytes | str) -> str:
 
 @pytest.fixture
 def vault_paths(tmp_path: Path) -> dict[str, Path]:
+    """Each test gets its own Vault config and database."""
     return {
         "config": tmp_path / "vault_config.json",
         "database": tmp_path / "mini_vault.db",

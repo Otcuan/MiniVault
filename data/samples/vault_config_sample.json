@@ -1,0 +1,15 @@
+{
+  "dek_nonce_b64": "Eto5ExtJfz+ER0Yt",
+  "dek_tag_b64": "hM0fWSzsvDYfgW6Bsaj16A==",
+  "encrypted_dek_b64": "Abf9E1G+8qArMK5B3NpQzOe2CEyVlTG6X/+DqqDihoo=",
+  "kdf": "argon2id",
+  "kdf_parameters": {
+    "hash_len": 32,
+    "memory_cost": 8192,
+    "parallelism": 4,
+    "time_cost": 1
+  },
+  "kdf_salt_b64": "YTUYzwnOu6knUnHEV9U9nw==",
+  "status": "locked",
+  "version": 1
+}

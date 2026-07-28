@@ -1,0 +1,48 @@
+{
+  "description": "Hash-chained audit log. Each entry_hash commits to the previous one, so editing, deleting or reordering entries breaks verification.",
+  "verification": {
+    "valid": true,
+    "entry_count": 3,
+    "head_hash": "14eedafc8a545215d1fdc3759ade26e192bbcbabfdd4503b33411b6c444e5989",
+    "first_invalid_sequence": null,
+    "reason": null
+  },
+  "entries": [
+    {
+      "id": 1,
+      "sequence": 1,
+      "requester_email": "bob@minivault.test",
+      "action": "ACCESS_DENIED",
+      "target_type": "named_key",
+      "target_identifier": "demo-aes",
+      "result": "DENIED",
+      "created_at": "2026-07-27T16:18:35.642886+00:00",
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "entry_hash": "0b7884fd8cc863869a6bc30b9b43d9e72f78bd268c46c9f1ef8ed66833ab90f2"
+    },
+    {
+      "id": 2,
+      "sequence": 2,
+      "requester_email": "bob@minivault.test",
+      "action": "ACCESS_DENIED",
+      "target_type": "kv_path",
+      "target_identifier": "secret/alice@minivault.test/database",
+      "result": "DENIED",
+      "created_at": "2026-07-27T16:18:35.781420+00:00",
+      "prev_hash": "0b7884fd8cc863869a6bc30b9b43d9e72f78bd268c46c9f1ef8ed66833ab90f2",
+      "entry_hash": "3724f2b81dc767e7e6c219e11ebb346ea8ca9a4cb2bf3a9b4b599e6e34310dca"
+    },
+    {
+      "id": 3,
+      "sequence": 3,
+      "requester_email": "bob@minivault.test",
+      "action": "ACCESS_DENIED",
+      "target_type": "named_key",
+      "target_identifier": "demo-aes",
+      "result": "DENIED",
+      "created_at": "2026-07-27T16:18:35.837878+00:00",
+      "prev_hash": "3724f2b81dc767e7e6c219e11ebb346ea8ca9a4cb2bf3a9b4b599e6e34310dca",
+      "entry_hash": "14eedafc8a545215d1fdc3759ade26e192bbcbabfdd4503b33411b6c444e5989"
+    }
+  ]
+}

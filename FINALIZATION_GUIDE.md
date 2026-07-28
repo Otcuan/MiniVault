@@ -1,6 +1,8 @@
 # HƯỚNG DẪN TÍCH HỢP VÀ NỘP BÀI CUỐI
 
-Bản này là source hoàn chỉnh đã được kiểm tra với 58 automated tests và statement coverage 96%.
+Bản này là source hoàn chỉnh đã được kiểm tra với **109 automated tests** và statement coverage **95%** (đo trên `src` + `main.py`).
+
+Đã bổ sung 3 tính năng mục IV (tổng +1.0, đúng mức trần): Transit key rotation, KV versioning, tamper-evident audit log. Chi tiết ở `README.md` mục "Optional features implemented".
 
 ## 1. Đưa source hoàn chỉnh vào repository hiện tại
 
@@ -37,9 +39,17 @@ python -m coverage report -m
 
 Tiêu chí đạt:
 
-- `58 passed`.
+- `109 passed`.
 - Không có failed/error/warning trong lần chạy `-W error`.
-- Coverage xấp xỉ 96% (có thể chênh rất nhỏ theo phiên bản thư viện).
+- Coverage xấp xỉ 95% trên `src` + `main.py` (có thể chênh rất nhỏ theo phiên bản thư viện).
+
+Sinh lại file bằng chứng nộp bài (mục VI của đề):
+
+```cmd
+python -m scripts.generate_samples
+```
+
+Lệnh này tự kiểm tra và báo lỗi nếu tìm thấy bất kỳ plaintext marker nào trong database sinh ra.
 
 ## 3. Chạy thử Swagger
 

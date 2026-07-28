@@ -12,3 +12,7 @@ class RecordTamperedError(KvError):
 
 class PermissionDeniedError(KvError):
     pass
+
+
+class InvalidVersionError(KvError):
+    """Requested KV version is not a positive integer."""
