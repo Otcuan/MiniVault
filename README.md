@@ -1,5 +1,7 @@
 # Mini Vault
 
+**Demo video: https://www.youtube.com/watch?v=2MmLVmJ9FEM&feature=youtu.be**
+
 A local FastAPI service implementing the two goals of the assignment:
 
 1. **Secure Storage (KV Engine)** — JSON secrets are encrypted at rest with AES-256-GCM and can only be accessed by the owner identified by a valid session token.
